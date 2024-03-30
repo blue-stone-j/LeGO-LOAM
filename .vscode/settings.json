@@ -4,6 +4,7 @@
     "/opt/ros/melodic/lib/python2.7/dist-packages"
   ],
   "files.associations": {
+    "*.lua": "lua",
     "cmath": "cpp",
     "*.tcc": "cpp",
     "deque": "cpp",
@@ -15,7 +16,14 @@
     "complex": "cpp",
     "cstdlib": "cpp",
     "array": "cpp",
-    "string_view": "cpp"
+    "string_view": "cpp",
+    "initializer_list": "cpp",
+    "queue": "cpp",
+    "ranges": "cpp",
+    "span": "cpp",
+    "utility": "cpp",
+    "xstring": "cpp",
+    "xutility": "cpp"
   },
   "python.analysis.extraPaths": [
     "/home/jpw/carto_ws/cartographer_detailed_comments_ws/install_isolated/lib/python2.7/dist-packages",

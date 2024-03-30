@@ -22,6 +22,8 @@
 
 using namespace gtsam;
 
+// intensity in posepoint is index(ID) of this pose
+
 class mapOptimization
 {
  private:
@@ -144,9 +146,9 @@ class mapOptimization
   float transformLast[6];
   float transformSum[6];
   float transformIncre[6];
-  float transformTobeMapped[6];
-  float transformBefMapped[6];
-  float transformAftMapped[6];
+  float transformTobeMapped[6]; // pose guess(??? last frame)
+  float transformBefMapped[6];  //???
+  float transformAftMapped[6];  // pose after registration and fusion with imu or by isam optimization
 
   int imuPointerFront;
   int imuPointerLast;
@@ -159,7 +161,7 @@ class mapOptimization
 
   double timeLastProcessing;
 
-  //???
+  // original point, point trandformed to map, unused, direction and size of residual
   PointType pointOri, pointSel, pointProj, coeff;
   // plane formulation: Ax+By+Cz+1=0
   cv::Mat matA0; // 5*3 存储5个紧邻点
@@ -342,6 +344,7 @@ class mapOptimization
     latestFrameID = 0;
   }
 
+  //???
   void transformAssociateToMap()
   {
     float x1 = cos(transformSum[1]) * (transformBefMapped[3] - transformSum[3]) - sin(transformSum[1]) * (transformBefMapped[5] - transformSum[5]);
@@ -380,15 +383,21 @@ class mapOptimization
     float srx              = -sbcx * (salx * sblx + calx * cblx * salz * sblz + calx * calz * cblx * cblz) - cbcx * sbcy * (calx * calz * (cbly * sblz - cblz * sblx * sbly) - calx * salz * (cbly * cblz + sblx * sbly * sblz) + cblx * salx * sbly) - cbcx * cbcy * (calx * salz * (cblz * sbly - cbly * sblx * sblz) - calx * calz * (sbly * sblz + cbly * cblz * sblx) + cblx * cbly * salx);
     transformTobeMapped[0] = -asin(srx);
 
-    float srycrx           = sbcx * (cblx * cblz * (caly * salz - calz * salx * saly) - cblx * sblz * (caly * calz + salx * saly * salz) + calx * saly * sblx) - cbcx * cbcy * ((caly * calz + salx * saly * salz) * (cblz * sbly - cbly * sblx * sblz) + (caly * salz - calz * salx * saly) * (sbly * sblz + cbly * cblz * sblx) - calx * cblx * cbly * saly) + cbcx * sbcy * ((caly * calz + salx * saly * salz) * (cbly * cblz + sblx * sbly * sblz) + (caly * salz - calz * salx * saly) * (cbly * sblz - cblz * sblx * sbly) + calx * cblx * saly * sbly);
-    float crycrx           = sbcx * (cblx * sblz * (calz * saly - caly * salx * salz) - cblx * cblz * (saly * salz + caly * calz * salx) + calx * caly * sblx) + cbcx * cbcy * ((saly * salz + caly * calz * salx) * (sbly * sblz + cbly * cblz * sblx) + (calz * saly - caly * salx * salz) * (cblz * sbly - cbly * sblx * sblz) + calx * caly * cblx * cbly) - cbcx * sbcy * ((saly * salz + caly * calz * salx) * (cbly * sblz - cblz * sblx * sbly) + (calz * saly - caly * salx * salz) * (cbly * cblz + sblx * sbly * sblz) - calx * caly * cblx * sbly);
-    transformTobeMapped[1] = atan2(srycrx / cos(transformTobeMapped[0]),
-                                   crycrx / cos(transformTobeMapped[0]));
+    float srycrx = sbcx * (cblx * cblz * (caly * salz - calz * salx * saly) - cblx * sblz * (caly * calz + salx * saly * salz) + calx * saly * sblx)
+                   - cbcx * cbcy * ((caly * calz + salx * saly * salz) * (cblz * sbly - cbly * sblx * sblz) + (caly * salz - calz * salx * saly) * (sbly * sblz + cbly * cblz * sblx) - calx * cblx * cbly * saly)
+                   + cbcx * sbcy * ((caly * calz + salx * saly * salz) * (cbly * cblz + sblx * sbly * sblz) + (caly * salz - calz * salx * saly) * (cbly * sblz - cblz * sblx * sbly) + calx * cblx * saly * sbly);
+    float crycrx = sbcx * (cblx * sblz * (calz * saly - caly * salx * salz) - cblx * cblz * (saly * salz + caly * calz * salx) + calx * caly * sblx)
+                   + cbcx * cbcy * ((saly * salz + caly * calz * salx) * (sbly * sblz + cbly * cblz * sblx) + (calz * saly - caly * salx * salz) * (cblz * sbly - cbly * sblx * sblz) + calx * caly * cblx * cbly)
+                   - cbcx * sbcy * ((saly * salz + caly * calz * salx) * (cbly * sblz - cblz * sblx * sbly) + (calz * saly - caly * salx * salz) * (cbly * cblz + sblx * sbly * sblz) - calx * caly * cblx * sbly);
+    transformTobeMapped[1] = atan2(srycrx / cos(transformTobeMapped[0]), crycrx / cos(transformTobeMapped[0]));
 
-    float srzcrx           = (cbcz * sbcy - cbcy * sbcx * sbcz) * (calx * salz * (cblz * sbly - cbly * sblx * sblz) - calx * calz * (sbly * sblz + cbly * cblz * sblx) + cblx * cbly * salx) - (cbcy * cbcz + sbcx * sbcy * sbcz) * (calx * calz * (cbly * sblz - cblz * sblx * sbly) - calx * salz * (cbly * cblz + sblx * sbly * sblz) + cblx * salx * sbly) + cbcx * sbcz * (salx * sblx + calx * cblx * salz * sblz + calx * calz * cblx * cblz);
-    float crzcrx           = (cbcy * sbcz - cbcz * sbcx * sbcy) * (calx * calz * (cbly * sblz - cblz * sblx * sbly) - calx * salz * (cbly * cblz + sblx * sbly * sblz) + cblx * salx * sbly) - (sbcy * sbcz + cbcy * cbcz * sbcx) * (calx * salz * (cblz * sbly - cbly * sblx * sblz) - calx * calz * (sbly * sblz + cbly * cblz * sblx) + cblx * cbly * salx) + cbcx * cbcz * (salx * sblx + calx * cblx * salz * sblz + calx * calz * cblx * cblz);
-    transformTobeMapped[2] = atan2(srzcrx / cos(transformTobeMapped[0]),
-                                   crzcrx / cos(transformTobeMapped[0]));
+    float srzcrx = (cbcz * sbcy - cbcy * sbcx * sbcz) * (calx * salz * (cblz * sbly - cbly * sblx * sblz) - calx * calz * (sbly * sblz + cbly * cblz * sblx) + cblx * cbly * salx)
+                   - (cbcy * cbcz + sbcx * sbcy * sbcz) * (calx * calz * (cbly * sblz - cblz * sblx * sbly) - calx * salz * (cbly * cblz + sblx * sbly * sblz) + cblx * salx * sbly)
+                   + cbcx * sbcz * (salx * sblx + calx * cblx * salz * sblz + calx * calz * cblx * cblz);
+    float crzcrx = (cbcy * sbcz - cbcz * sbcx * sbcy) * (calx * calz * (cbly * sblz - cblz * sblx * sbly) - calx * salz * (cbly * cblz + sblx * sbly * sblz) + cblx * salx * sbly)
+                   - (sbcy * sbcz + cbcy * cbcz * sbcx) * (calx * salz * (cblz * sbly - cbly * sblx * sblz) - calx * calz * (sbly * sblz + cbly * cblz * sblx) + cblx * cbly * salx)
+                   + cbcx * cbcz * (salx * sblx + calx * cblx * salz * sblz + calx * calz * cblx * cblz);
+    transformTobeMapped[2] = atan2(srzcrx / cos(transformTobeMapped[0]), crzcrx / cos(transformTobeMapped[0]));
 
     x1 = cos(transformTobeMapped[2]) * transformIncre[3] - sin(transformTobeMapped[2]) * transformIncre[4];
     y1 = sin(transformTobeMapped[2]) * transformIncre[3] + cos(transformTobeMapped[2]) * transformIncre[4];
@@ -403,13 +412,16 @@ class mapOptimization
     transformTobeMapped[5] = transformAftMapped[5] - (-sin(transformTobeMapped[1]) * x2 + cos(transformTobeMapped[1]) * z2);
   }
 
+  // weighted fuse transformTobeMapped and imu
   void transformUpdate()
   {
+    // if have received imu msg,  it will be a non-nagetive value. Otherwise, it will be -1(initial value)
     if (imuPointerLast >= 0)
     {
       float imuRollLast = 0, imuPitchLast = 0;
-      while (imuPointerFront != imuPointerLast)
+      while (imuPointerFront != imuPointerLast) // 如果还有IMU数据就可以继续循环
       {
+        // find first imu time that is later than this point
         if (timeLaserOdometry + scanPeriod < imuTime[imuPointerFront])
         {
           break;
@@ -443,6 +455,7 @@ class mapOptimization
     }
   }
 
+  // update initial guess to transform point to global frame
   void updatePointAssociateToMapSinCos()
   {
     cRoll = cos(transformTobeMapped[0]);
@@ -475,6 +488,7 @@ class mapOptimization
     po->intensity = pi->intensity;
   }
 
+  // parse 6 elements from pose
   void updateTransformPointCloudSinCos(PointTypePose *tIn)
   {
     ctRoll = cos(tIn->roll);
@@ -776,6 +790,7 @@ class mapOptimization
     }
   }
 
+  // look for loop and construct loop local map
   bool detectLoopClosure()
   {
     latestSurfKeyFrameCloud->clear();
@@ -793,12 +808,14 @@ class mapOptimization
     for (int i = 0; i < pointSearchIndLoop.size(); ++i)
     {
       int id = pointSearchIndLoop[i];
+      // loop frame should be old enough
       if (abs(cloudKeyPoses6D->points[id].time - timeLaserOdometry) > 30.0)
       {
         closestHistoryFrameID = id;
         break;
       }
     }
+    // if don't find loop
     if (closestHistoryFrameID == -1)
     {
       return false;
@@ -812,6 +829,7 @@ class mapOptimization
     int cloudSize = latestSurfKeyFrameCloud->points.size();
     for (int i = 0; i < cloudSize; ++i)
     {
+      // valid intensity
       if ((int)latestSurfKeyFrameCloud->points[i].intensity >= 0)
       {
         hahaCloud->push_back(latestSurfKeyFrameCloud->points[i]);
@@ -819,7 +837,7 @@ class mapOptimization
     }
     latestSurfKeyFrameCloud->clear();
     *latestSurfKeyFrameCloud = *hahaCloud;
-    // save history near key frames
+    // save history key frames near loop frames
     for (int j = -historyKeyframeSearchNum; j <= historyKeyframeSearchNum; ++j)
     {
       if (closestHistoryFrameID + j < 0 || closestHistoryFrameID + j > latestFrameIDLoopCloure)
@@ -854,9 +872,10 @@ class mapOptimization
     // try to find close key frame if there are any
     if (potentialLoopFlag == false)
     {
+      // find some key frames that is old enough or close enough for loop closure
       if (detectLoopClosure() == true)
       {
-        potentialLoopFlag                      = true; // find some key frames that is old enough or close enough for loop closure
+        potentialLoopFlag                      = true;
         timeSaveFirstCurrentScanForLoopClosure = timeLaserOdometry;
       }
       if (potentialLoopFlag == false)
@@ -895,11 +914,11 @@ class mapOptimization
       pubIcpKeyFrames.publish(cloudMsgTemp);
     }
     /*
-        get pose constraint
-        */
+      get pose constraint
+    */
     float x, y, z, roll, pitch, yaw;
     Eigen::Affine3f correctionCameraFrame;
-    correctionCameraFrame = icp.getFinalTransformation(); // get transformation in camera frame (because points are in camera frame)
+    correctionCameraFrame = icp.getFinalTransformation(); // transformation in camera frame (because points are in camera frame)
     pcl::getTranslationAndEulerAngles(correctionCameraFrame, x, y, z, roll, pitch, yaw);
     Eigen::Affine3f correctionLidarFrame = pcl::getTransformation(z, x, y, yaw, roll, pitch);
     // transform from world origin to wrong pose
@@ -914,8 +933,8 @@ class mapOptimization
     Vector6 << noiseScore, noiseScore, noiseScore, noiseScore, noiseScore, noiseScore;
     constraintNoise = noiseModel::Diagonal::Variances(Vector6);
     /*
-        add constraints
-        */
+      add constraints
+    */
     std::lock_guard<std::mutex> lock(mtx);
     gtSAMgraph.add(BetweenFactor<Pose3>(latestFrameIDLoopCloure, closestHistoryFrameID, poseFrom.between(poseTo), constraintNoise));
     isam->update(gtSAMgraph);
@@ -925,14 +944,16 @@ class mapOptimization
     aLoopIsClosed = true;
   }
 
+  // camera frame to lidar frame
   Pose3 pclPointTogtsamPose3(PointTypePose thisPoint)
-  { // camera frame to lidar frame
+  {
     return Pose3(Rot3::RzRyRx(double(thisPoint.yaw), double(thisPoint.roll), double(thisPoint.pitch)),
                  Point3(double(thisPoint.z), double(thisPoint.x), double(thisPoint.y)));
   }
 
+  // camera frame to lidar frame
   Eigen::Affine3f pclPointToAffine3fCameraToLidar(PointTypePose thisPoint)
-  { // camera frame to lidar frame
+  {
     return pcl::getTransformation(thisPoint.z, thisPoint.x, thisPoint.y, thisPoint.yaw, thisPoint.roll, thisPoint.pitch);
   }
 
@@ -946,8 +967,9 @@ class mapOptimization
     if (loopClosureEnableFlag == true)
     {
       // only use recent key poses for graph building
+      // queue is not full (the beginning of mapping or a loop is just closed)
       if (recentCornerCloudKeyFrames.size() < surroundingKeyframeSearchNum)
-      { // queue is not full (the beginning of mapping or a loop is just closed)
+      {
         // clear recent key frames queue
         recentCornerCloudKeyFrames.clear();
         recentSurfCloudKeyFrames.clear();
@@ -962,17 +984,19 @@ class mapOptimization
           recentCornerCloudKeyFrames.push_front(transformPointCloud(cornerCloudKeyFrames[thisKeyInd]));
           recentSurfCloudKeyFrames.push_front(transformPointCloud(surfCloudKeyFrames[thisKeyInd]));
           recentOutlierCloudKeyFrames.push_front(transformPointCloud(outlierCloudKeyFrames[thisKeyInd]));
+          // if we have found enough frames
           if (recentCornerCloudKeyFrames.size() >= surroundingKeyframeSearchNum)
           {
             break;
           }
         }
       }
-      else
-      { // queue is full, pop the oldest key frame and push the latest key frame
+      else // queue is full, pop the oldest key frame and push the latest key frame
+      {
+        // if the robot is not moving, lastID is (size-1), no necessary to update recent frames
         if (latestFrameID != cloudKeyPoses3D->points.size() - 1)
-        { // if the robot is not moving, no need to update recent frames
-
+        {
+          // pop old one and push new one
           recentCornerCloudKeyFrames.pop_front();
           recentSurfCloudKeyFrames.pop_front();
           recentOutlierCloudKeyFrames.pop_front();
@@ -986,6 +1010,7 @@ class mapOptimization
         }
       }
 
+      // construct map from recent key frames
       for (int i = 0; i < recentCornerCloudKeyFrames.size(); ++i)
       {
         *laserCloudCornerFromMap += *recentCornerCloudKeyFrames[i];
@@ -1001,7 +1026,9 @@ class mapOptimization
       kdtreeSurroundingKeyPoses->setInputCloud(cloudKeyPoses3D);
       kdtreeSurroundingKeyPoses->radiusSearch(currentRobotPosPoint, (double)surroundingKeyframeSearchRadius, pointSearchInd, pointSearchSqDis, 0);
       for (int i = 0; i < pointSearchInd.size(); ++i)
+      {
         surroundingKeyPoses->points.push_back(cloudKeyPoses3D->points[pointSearchInd[i]]);
+      }
       downSizeFilterSurroundingKeyPoses.setInputCloud(surroundingKeyPoses);
       downSizeFilterSurroundingKeyPoses.filter(*surroundingKeyPosesDS);
       // delete key frames that are not in surrounding region
@@ -1009,8 +1036,10 @@ class mapOptimization
       for (int i = 0; i < surroundingExistingKeyPosesID.size(); ++i)
       {
         bool existingFlag = false;
+        // find whether this pose is surrounding pose by brutal search
         for (int j = 0; j < numSurroundingPosesDS; ++j)
         {
+          // intensity is ID of frames
           if (surroundingExistingKeyPosesID[i] == (int)surroundingKeyPosesDS->points[j].intensity)
           {
             existingFlag = true;
@@ -1019,6 +1048,7 @@ class mapOptimization
             }
           }
         }
+        // if not surrounding, delete it
         if (existingFlag == false)
         {
           surroundingExistingKeyPosesID.erase(surroundingExistingKeyPosesID.begin() + i);
@@ -1027,7 +1057,7 @@ class mapOptimization
           surroundingOutlierCloudKeyFrames.erase(surroundingOutlierCloudKeyFrames.begin() + i);
           --i;
         }
-      }
+      } // endfor: have deleted old poses
       // add new key frames that are not in calculated existing key frames
       for (int i = 0; i < numSurroundingPosesDS; ++i)
       {
@@ -1042,11 +1072,12 @@ class mapOptimization
             }
           }
         }
+        // if it exist, nothing will happen
         if (existingFlag == true)
         {
           continue;
         }
-        else
+        else // add this pose
         {
           int thisKeyInd                   = (int)surroundingKeyPosesDS->points[i].intensity;
           PointTypePose thisTransformation = cloudKeyPoses6D->points[thisKeyInd];
@@ -1056,7 +1087,7 @@ class mapOptimization
           surroundingSurfCloudKeyFrames.push_back(transformPointCloud(surfCloudKeyFrames[thisKeyInd]));
           surroundingOutlierCloudKeyFrames.push_back(transformPointCloud(outlierCloudKeyFrames[thisKeyInd]));
         }
-      }
+      } // endfor: have added new poses
 
       for (int i = 0; i < surroundingExistingKeyPosesID.size(); ++i)
       {
@@ -1064,7 +1095,8 @@ class mapOptimization
         *laserCloudSurfFromMap += *surroundingSurfCloudKeyFrames[i];
         *laserCloudSurfFromMap += *surroundingOutlierCloudKeyFrames[i];
       }
-    }
+    } // endif: loop flag
+
     // Downsample the surrounding corner key frames (or map)
     downSizeFilterCorner.setInputCloud(laserCloudCornerFromMap);
     downSizeFilterCorner.filter(*laserCloudCornerFromMapDS);
@@ -1174,12 +1206,12 @@ class mapOptimization
           float x2 = cx - 0.1 * matV1.at<float>(0, 0); // define x2,y2,z2 is point B
           float y2 = cy - 0.1 * matV1.at<float>(0, 1);
           float z2 = cz - 0.1 * matV1.at<float>(0, 2);
-          // residual, vertial line direction from point to edge, jocabi direction)
+          // residual, vertical line direction from point to edge, jocabi direction)
           // define MO = cross multiplication of AO and BO; |MO|=a012
           float a012 = sqrt(((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) + ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1)) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1)) + ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1)));
           // distance between two points = |AB|
           float l12 = sqrt((x1 - x2) * (x1 - x2) + (y1 - y2) * (y1 - y2) + (z1 - z2) * (z1 - z2));
-          // direction of vertial line from point O to edge AB = direction of cross multiplication of BA and OM
+          // direction of vertical line from point O to edge AB = direction of cross multiplication of BA and OM
           float la = ((y1 - y2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) + (z1 - z2) * ((x0 - x1) * (z0 - z2) - (x0 - x2) * (z0 - z1))) / a012 / l12;
 
           float lb = -((x1 - x2) * ((x0 - x1) * (y0 - y2) - (x0 - x2) * (y0 - y1)) - (z1 - z2) * ((y0 - y1) * (z0 - z2) - (y0 - y2) * (z0 - z1))) / a012 / l12;
@@ -1194,7 +1226,7 @@ class mapOptimization
           coeff.y         = s * lb;
           coeff.z         = s * lc;
           coeff.intensity = s * ld2;
-          // this is a valid constraint for map optimization; residual < 10cm
+          // this is a valid constraint for map optimization if residual < 10cm
           if (s > 0.1)
           {
             laserCloudOri->push_back(pointOri);
@@ -1216,6 +1248,7 @@ class mapOptimization
       pointAssociateToMap(&pointOri, &pointSel);
       kdtreeSurfFromMap->nearestKSearch(pointSel, 5, pointSearchInd, pointSearchSqDis);
 
+      // the farmost point of 5 nearest points is valid
       if (pointSearchSqDis[4] < 1.0)
       {
         for (int j = 0; j < 5; j++)
@@ -1226,11 +1259,13 @@ class mapOptimization
         }
         cv::solve(matA0, matB0, matX0, cv::DECOMP_QR);
 
+        // 法向量参数 ax+by+cz +d = 0
         float pa = matX0.at<float>(0, 0);
         float pb = matX0.at<float>(1, 0);
         float pc = matX0.at<float>(2, 0);
         float pd = 1;
 
+        // normalize x --> |x| = 1
         float ps = sqrt(pa * pa + pb * pb + pc * pc);
         pa /= ps;
         pb /= ps;
@@ -1238,9 +1273,13 @@ class mapOptimization
         pd /= ps;
 
         bool planeValid = true;
+        // if one point of 5 points is far from this plane, curvature of this plane is large and this is a invalid palne
         for (int j = 0; j < 5; j++)
         {
-          if (fabs(pa * laserCloudSurfFromMapDS->points[pointSearchInd[j]].x + pb * laserCloudSurfFromMapDS->points[pointSearchInd[j]].y + pc * laserCloudSurfFromMapDS->points[pointSearchInd[j]].z + pd) > 0.2)
+          if (fabs(pa * laserCloudSurfFromMapDS->points[pointSearchInd[j]].x
+                   + pb * laserCloudSurfFromMapDS->points[pointSearchInd[j]].y
+                   + pc * laserCloudSurfFromMapDS->points[pointSearchInd[j]].z + pd)
+              > 0.2)
           {
             planeValid = false;
             break;
@@ -1258,14 +1297,17 @@ class mapOptimization
           coeff.z         = s * pc;
           coeff.intensity = s * pd2;
 
+          // 误差在允许的范围内的话把这个点放到点云laserCloudOri中去，把对应的向量coeff放到coeffSel中
           if (s > 0.1)
           {
             laserCloudOri->push_back(pointOri);
             coeffSel->push_back(coeff);
           }
-        }
-      }
-    }
+        } // endif: process this valid plane
+
+      } // endif: process this valid point
+
+    } // endfor: have traversed all surf points
   }
 
   bool LMOptimization(int iterCount)
@@ -1294,11 +1336,17 @@ class mapOptimization
       pointOri = laserCloudOri->points[i];
       coeff    = coeffSel->points[i];
 
-      float arx = (crx * sry * srz * pointOri.x + crx * crz * sry * pointOri.y - srx * sry * pointOri.z) * coeff.x + (-srx * srz * pointOri.x - crz * srx * pointOri.y - crx * pointOri.z) * coeff.y + (crx * cry * srz * pointOri.x + crx * cry * crz * pointOri.y - cry * srx * pointOri.z) * coeff.z;
+      // calculate jacobi of rotation(rotate around yxz in camera <-> around zyx in lidar)
+      float arx = (crx * sry * srz * pointOri.x + crx * crz * sry * pointOri.y - srx * sry * pointOri.z) * coeff.x
+                  + (-srx * srz * pointOri.x - crz * srx * pointOri.y - crx * pointOri.z) * coeff.y
+                  + (crx * cry * srz * pointOri.x + crx * cry * crz * pointOri.y - cry * srx * pointOri.z) * coeff.z;
 
-      float ary = ((cry * srx * srz - crz * sry) * pointOri.x + (sry * srz + cry * crz * srx) * pointOri.y + crx * cry * pointOri.z) * coeff.x + ((-cry * crz - srx * sry * srz) * pointOri.x + (cry * srz - crz * srx * sry) * pointOri.y - crx * sry * pointOri.z) * coeff.z;
+      float ary = ((cry * srx * srz - crz * sry) * pointOri.x + (sry * srz + cry * crz * srx) * pointOri.y + crx * cry * pointOri.z) * coeff.x
+                  + ((-cry * crz - srx * sry * srz) * pointOri.x + (cry * srz - crz * srx * sry) * pointOri.y - crx * sry * pointOri.z) * coeff.z;
 
-      float arz = ((crz * srx * sry - cry * srz) * pointOri.x + (-cry * crz - srx * sry * srz) * pointOri.y) * coeff.x + (crx * crz * pointOri.x - crx * srz * pointOri.y) * coeff.y + ((sry * srz + cry * crz * srx) * pointOri.x + (crz * sry - cry * srx * srz) * pointOri.y) * coeff.z;
+      float arz = ((crz * srx * sry - cry * srz) * pointOri.x + (-cry * crz - srx * sry * srz) * pointOri.y) * coeff.x
+                  + (crx * crz * pointOri.x - crx * srz * pointOri.y) * coeff.y
+                  + ((sry * srz + cry * crz * srx) * pointOri.x + (crz * sry - cry * srx * srz) * pointOri.y) * coeff.z;
 
       matA.at<float>(i, 0) = arx;
       matA.at<float>(i, 1) = ary;
@@ -1308,40 +1356,47 @@ class mapOptimization
       matA.at<float>(i, 5) = coeff.z;
       matB.at<float>(i, 0) = -coeff.intensity;
     }
+    // JTJ * deltax = -JTe (J:Jacobi of e; e:residual, scalar quantity)
+    // construct JTJ and -JTe matrix
     cv::transpose(matA, matAt);
     matAtA = matAt * matA;
     matAtB = matAt * matB;
+    // QR factorization; the system can be over-defined and/or the matrix src1 can be singular
     cv::solve(matAtA, matAtB, matX, cv::DECOMP_QR);
 
+    // if it's the first iteration, check whether degenerated
     if (iterCount == 0)
     {
       cv::Mat matE(1, 6, CV_32F, cv::Scalar::all(0));
       cv::Mat matV(6, 6, CV_32F, cv::Scalar::all(0));
       cv::Mat matV2(6, 6, CV_32F, cv::Scalar::all(0));
 
-      cv::eigen(matAtA, matE, matV);
+      cv::eigen(matAtA, matE, matV); // mat E: eigenvalue, max->min; mat V: eigenvector
       matV.copyTo(matV2);
 
       isDegenerate      = false;
-      float eignThre[6] = {100, 100, 100, 100, 100, 100};
+      float eignThre[6] = {100, 100, 100, 100, 100, 100}; // eigenthresold
+      // traverse eigen value from min to max
       for (int i = 5; i >= 0; i--)
       {
+        // eigenvalue < eigenthresold,特征值太小,说明矩阵在相应的特征向量方向退化
         if (matE.at<float>(0, i) < eignThre[i])
         {
           for (int j = 0; j < 6; j++)
           {
-            matV2.at<float>(i, j) = 0;
+            matV2.at<float>(i, j) = 0; // corresponding vector is set as zero
           }
-          isDegenerate = true;
+          isDegenerate = true; // there is degenarated component
         }
         else
         {
           break;
         }
       }
-      matP = matV.inv() * matV2;
+      matP = matV.inv() * matV2; // eigenvector matrix without degenerated component
     }
 
+    // if degenerate, set degenerated component of delta x as zero
     if (isDegenerate)
     {
       cv::Mat matX2(6, 1, CV_32F, cv::Scalar::all(0));
@@ -1349,6 +1404,7 @@ class mapOptimization
       matX = matP * matX2;
     }
 
+    // update: x(k+1) = x(k) + delta x (for k-th iteration)
     transformTobeMapped[0] += matX.at<float>(0, 0);
     transformTobeMapped[1] += matX.at<float>(1, 0);
     transformTobeMapped[2] += matX.at<float>(2, 0);
@@ -1365,26 +1421,30 @@ class mapOptimization
 
     if (deltaR < 0.05 && deltaT < 0.05)
     {
-      return true;
+      return true; // pose has converged, end optomization
     }
-    return false;
+    return false; // pose hasn't converged, keep optimizing
   }
 
   void scan2MapOptimization()
   {
     if (laserCloudCornerFromMapDSNum > 10 && laserCloudSurfFromMapDSNum > 100)
     {
+      // create kd-tree for corner and surf respectively(map)
       kdtreeCornerFromMap->setInputCloud(laserCloudCornerFromMapDS);
       kdtreeSurfFromMap->setInputCloud(laserCloudSurfFromMapDS);
 
+      // iterative solution. use ceres to optimize in aloam; this code and loam use GaussNewton
       for (int iterCount = 0; iterCount < 10; iterCount++)
       {
         laserCloudOri->clear();
         coeffSel->clear();
 
+        // get two residual and two jacobi; 点到平面, 点到直线的残差
         cornerOptimization(iterCount);
         surfOptimization(iterCount);
 
+        // optimize: 高斯牛顿法迭代优化
         if (LMOptimization(iterCount) == true)
         {
           break;
@@ -1411,15 +1471,19 @@ class mapOptimization
     }
 
     if (saveThisKeyFrame == false && !cloudKeyPoses3D->points.empty())
+    {
       return;
+    }
 
     previousRobotPosPoint = currentRobotPosPoint;
     /**
-     * update grsam graph
+     * update gtsam graph
      */
-    if (cloudKeyPoses3D->points.empty())
+    if (cloudKeyPoses3D->points.empty()) // if this frame is first key frame;
     {
+      // add prior constraint to constraint 0th node(vertice)
       gtSAMgraph.add(PriorFactor<Pose3>(0, Pose3(Rot3::RzRyRx(transformTobeMapped[2], transformTobeMapped[0], transformTobeMapped[1]), Point3(transformTobeMapped[5], transformTobeMapped[3], transformTobeMapped[4])), priorNoise));
+      // add vertice info(0, initial value)
       initialEstimate.insert(0, Pose3(Rot3::RzRyRx(transformTobeMapped[2], transformTobeMapped[0], transformTobeMapped[1]),
                                       Point3(transformTobeMapped[5], transformTobeMapped[3], transformTobeMapped[4])));
       for (int i = 0; i < 6; ++i)
@@ -1427,15 +1491,18 @@ class mapOptimization
         transformLast[i] = transformTobeMapped[i];
       }
     }
-    else
+    else // if not first key frame, add between factor
     {
       gtsam::Pose3 poseFrom = Pose3(Rot3::RzRyRx(transformLast[2], transformLast[0], transformLast[1]),
-                                    Point3(transformLast[5], transformLast[3], transformLast[4]));
+                                    Point3(transformLast[5], transformLast[3], transformLast[4])); // last key frame
       gtsam::Pose3 poseTo   = Pose3(Rot3::RzRyRx(transformAftMapped[2], transformAftMapped[0], transformAftMapped[1]),
-                                    Point3(transformAftMapped[5], transformAftMapped[3], transformAftMapped[4]));
+                                    Point3(transformAftMapped[5], transformAftMapped[3], transformAftMapped[4])); // current frame
+      // between factor(index of last key frame(node), index of current(node), constraint, confidence)
       gtSAMgraph.add(BetweenFactor<Pose3>(cloudKeyPoses3D->points.size() - 1, cloudKeyPoses3D->points.size(), poseFrom.between(poseTo), odometryNoise));
-      initialEstimate.insert(cloudKeyPoses3D->points.size(), Pose3(Rot3::RzRyRx(transformAftMapped[2], transformAftMapped[0], transformAftMapped[1]),
-                                                                   Point3(transformAftMapped[5], transformAftMapped[3], transformAftMapped[4])));
+      // add node info(index of node, initial value(prior pose))
+      initialEstimate.insert(cloudKeyPoses3D->points.size(),
+                             Pose3(Rot3::RzRyRx(transformAftMapped[2], transformAftMapped[0], transformAftMapped[1]),
+                                   Point3(transformAftMapped[5], transformAftMapped[3], transformAftMapped[4])));
     }
     /**
      * update iSAM
@@ -1503,6 +1570,7 @@ class mapOptimization
     outlierCloudKeyFrames.push_back(thisOutlierKeyFrame);
   }
 
+  // correct pose after loop optimization
   void correctPoses()
   {
     if (aLoopIsClosed == true)
@@ -1549,6 +1617,7 @@ class mapOptimization
 
       std::lock_guard<std::mutex> lock(mtx);
 
+      // limit frequency of optimization
       if (timeLaserOdometry - timeLastProcessing >= mappingProcessInterval)
       {
         timeLastProcessing = timeLaserOdometry;

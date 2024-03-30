@@ -58,13 +58,13 @@ class FeatureAssociation
   int *cloudNeighborPicked;
   int *cloudLabel;
 
-  int imuPointerFront; // 比该点晚的IMU数据中最早的一帧
-  int imuPointerLast;  // ???
+  int imuPointerFront; // 比该点晚的IMU数据中最早的一帧; front pointer of circular queue
+  int imuPointerLast;  // back pointer of circular queue
   int imuPointerLastIteration;
 
-  float imuRollStart, imuPitchStart, imuYawStart;
-  float cosImuRollStart, cosImuPitchStart, cosImuYawStart; //???
-  float sinImuRollStart, sinImuPitchStart, sinImuYawStart; //???
+  float imuRollStart, imuPitchStart, imuYawStart;          // 该点云的第一个点对应的IMU
+  float cosImuRollStart, cosImuPitchStart, cosImuYawStart; // 该点云的第一个点对应的IMU的三角函数
+  float sinImuRollStart, sinImuPitchStart, sinImuYawStart; // 同上
   float imuRollCur, imuPitchCur, imuYawCur;
 
   float imuVeloXStart, imuVeloYStart, imuVeloZStart;    // 该帧点云的起始点的速度
@@ -343,7 +343,7 @@ class FeatureAssociation
     sinImuYawStart   = sin(imuYawStart);
   }
 
-  //???
+  // position shift from start moment to current point
   void ShiftToStartIMU(float pointTime)
   {
     imuShiftFromStartXCur = imuShiftXCur - imuShiftXStart - imuVeloXStart * pointTime;
@@ -362,7 +362,7 @@ class FeatureAssociation
     imuShiftFromStartYCur = -sinImuRollStart * x2 + cosImuRollStart * y2;
     imuShiftFromStartZCur = z2;
   }
-  //???
+  // calculate velo at start moment using current velo and orientation
   void VeloToStartIMU()
   {
     imuVeloFromStartXCur = imuVeloXCur - imuVeloXStart;
@@ -434,7 +434,8 @@ class FeatureAssociation
     int imuPointerBack = (imuPointerLast + imuQueLength - 1) % imuQueLength;
     double timeDiff    = imuTime[imuPointerLast] - imuTime[imuPointerBack];
     if (timeDiff < scanPeriod)
-    { // x = x0 + v*△t + 0.5 a*t^2
+    {
+      // x = x0 + v*△t + 0.5 a*t^2
       imuShiftX[imuPointerLast] = imuShiftX[imuPointerBack] + imuVeloX[imuPointerBack] * timeDiff + accX * timeDiff * timeDiff / 2;
       imuShiftY[imuPointerLast] = imuShiftY[imuPointerBack] + imuVeloY[imuPointerBack] * timeDiff + accY * timeDiff * timeDiff / 2;
       imuShiftZ[imuPointerLast] = imuShiftZ[imuPointerBack] + imuVeloZ[imuPointerBack] * timeDiff + accZ * timeDiff * timeDiff / 2;
@@ -510,7 +511,7 @@ class FeatureAssociation
     newSegmentedCloudInfo     = true;
   }
 
-  // ???
+  // transform all points to start moment
   void adjustDistortion()
   {
     bool halfPassed = false; // 判断剩下的点是不是属于后一半的点，用于计算角度
@@ -558,15 +559,17 @@ class FeatureAssociation
 
       // 匀速旋转假设，根据角度计算该点的时间
       float relTime = (ori - segInfo.startOrientation) / segInfo.orientationDiff;
-      // ???整数部分为行号；小数部分为该点到点云起始时刻的时间
+      // 整数部分为行号；小数部分为该点到点云起始时刻的时间
       point.intensity = int(segmentedCloud->points[i].intensity) + scanPeriod * relTime;
 
+      // if any imu data is inserted, it will be a non-nagetive value. Otherwise, it will be -1(initial value)
       if (imuPointerLast >= 0)
       {
         float pointTime = relTime * scanPeriod;
         imuPointerFront = imuPointerLastIteration;
         while (imuPointerFront != imuPointerLast) // 如果还有IMU数据就可以继续循环
         {
+          // find first imu time that is later than this point
           if (timeScanCur + pointTime < imuTime[imuPointerFront])
           {
             break;
@@ -618,8 +621,9 @@ class FeatureAssociation
           imuShiftZCur = imuShiftZ[imuPointerFront] * ratioFront + imuShiftZ[imuPointerBack] * ratioBack;
         }
 
+        // 这帧点云的第一个点
         if (i == 0)
-        { // 这帧点云的第一个点
+        {
           imuRollStart  = imuRollCur;
           imuPitchStart = imuPitchCur;
           imuYawStart   = imuYawCur;
@@ -660,10 +664,11 @@ class FeatureAssociation
         } // 处理完第一个点
         else
         {
+          // transform all points to start moment
           VeloToStartIMU();
           TransformToStartIMU(&point);
         }
-      } //
+      } // endif:
       segmentedCloud->points[i] = point;
     } // endfor: have calculated all points' pose and velocity
 
@@ -797,7 +802,9 @@ class FeatureAssociation
             {
               int columnDiff = std::abs(int(segInfo.segmentedCloudColInd[ind + l] - segInfo.segmentedCloudColInd[ind + l + 1]));
               if (columnDiff > 10)
+              {
                 break;
+              }
               cloudNeighborPicked[ind + l] = 1;
             }
           }
@@ -826,7 +833,9 @@ class FeatureAssociation
             {
               int columnDiff = std::abs(int(segInfo.segmentedCloudColInd[ind + l] - segInfo.segmentedCloudColInd[ind + l - 1]));
               if (columnDiff > 10)
+              {
                 break;
+              }
 
               cloudNeighborPicked[ind + l] = 1;
             }
@@ -834,18 +843,21 @@ class FeatureAssociation
             {
               int columnDiff = std::abs(int(segInfo.segmentedCloudColInd[ind + l] - segInfo.segmentedCloudColInd[ind + l + 1]));
               if (columnDiff > 10)
+              {
                 break;
+              }
 
               cloudNeighborPicked[ind + l] = 1;
             }
           }
         } // endfor: 已经标记平面点
-          // label 小于 0 的点是平面点
+
+        // 保存面点flat and less flat
         for (int k = sp; k <= ep; k++)
         {
+          // label 小于 0 的点是平面点
           if (cloudLabel[k] <= 0)
-          { // flat and less flat
-            // 保存面点
+          {
             surfPointsLessFlatScan->push_back(segmentedCloud->points[k]);
           }
         }
@@ -990,6 +1002,7 @@ class FeatureAssociation
     po->intensity = int(pi->intensity);
   }
 
+  //???
   void PluginIMURotation(float bcx, float bcy, float bcz, float blx, float bly, float blz,
                          float alx, float aly, float alz, float &acx, float &acy, float &acz)
   {
@@ -1026,9 +1039,10 @@ class FeatureAssociation
     acz          = atan2(srzcrx / cos(acx), crzcrx / cos(acx));
   }
 
-  void AccumulateRotation(float cx, float cy, float cz,
-                          float lx, float ly, float lz,
-                          float &ox, float &oy, float &oz)
+  // rotation matrix multiplication
+  void AccumulateRotation(float cx, float cy, float cz,    // transform sum
+                          float lx, float ly, float lz,    // transform cur
+                          float &ox, float &oy, float &oz) // rotation
   {
     float srx = cos(lx) * cos(cx) * sin(ly) * sin(cz) - cos(cx) * cos(cz) * sin(lx) - cos(lx) * cos(ly) * sin(cx);
     ox        = -asin(srx);
@@ -1060,17 +1074,20 @@ class FeatureAssociation
     {
       TransformToStart(&cornerPointsSharp->points[i], &pointSel);
 
+      // not find correspondences for every iteration to reduce computation comsume
       if (iterCount % 5 == 0)
       {
         kdtreeCornerLast->nearestKSearch(pointSel, 1, pointSearchInd, pointSearchSqDis);
         int closestPointInd = -1, minPointInd2 = -1;
 
+        // 因为两帧之间的距离应该很短，因此两帧间的距离只有小于给定距离阈值才认为是有效约束,可以用于匹配。此处判断最近的点是否小于阈值
         if (pointSearchSqDis[0] < nearestFeatureSearchSqDist)
         {
           closestPointInd      = pointSearchInd[0];
           int closestPointScan = int(laserCloudCornerLast->points[closestPointInd].intensity);
 
           float pointSqDis, minPointSqDis2 = nearestFeatureSearchSqDist;
+          // search in the direction of increasing scan line
           for (int j = closestPointInd + 1; j < cornerPointsSharpNum; j++)
           {
             if (int(laserCloudCornerLast->points[j].intensity) > closestPointScan + 2.5)
@@ -1089,6 +1106,7 @@ class FeatureAssociation
               }
             }
           }
+          // search in the direction of decreasing scan line
           for (int j = closestPointInd - 1; j >= 0; j--)
           {
             if (int(laserCloudCornerLast->points[j].intensity) < closestPointScan - 2.5)
@@ -1106,13 +1124,14 @@ class FeatureAssociation
                 minPointInd2   = j;
               }
             }
-          } // endfor:
-        }
+          }
+        } // endif: 判断最近的点是否小于阈值
 
         pointSearchCornerInd1[i] = closestPointInd;
         pointSearchCornerInd2[i] = minPointInd2;
       }
 
+      // if find correspondence
       if (pointSearchCornerInd2[i] >= 0)
       {
         tripod1 = laserCloudCornerLast->points[pointSearchCornerInd1[i]];
@@ -1160,8 +1179,9 @@ class FeatureAssociation
           laserCloudOri->push_back(cornerPointsSharp->points[i]);
           coeffSel->push_back(coeff);
         }
-      }
-    } // endfor:
+      } // endif: calculate properties of correspondence
+
+    } // endfor: have traversed all corners
   }
 
   void findCorrespondingSurfFeatures(int iterCount)
@@ -1346,6 +1366,7 @@ class FeatureAssociation
     float c8 = -b1;
     float c9 = tx * -b2 - ty * -b1;
 
+    // construct equation
     for (int i = 0; i < pointSelNum; i++)
     {
       pointOri = laserCloudOri->points[i];
@@ -1366,8 +1387,9 @@ class FeatureAssociation
       matA.at<float>(i, 0) = arx; // jacobi of rotation
       matA.at<float>(i, 1) = arz;
       matA.at<float>(i, 2) = aty;
-      matB.at<float>(i, 0) = -0.05 * d2; // residual
+      matB.at<float>(i, 0) = -0.05 * d2; // residual=weight*distance
     }
+
     // JTJ * deltax = -JTe (J:Jacobi of e; e:residual, scalar quantity)
     // construct JTJ and -JTe matrix
     cv::transpose(matA, matAt);
@@ -1376,8 +1398,9 @@ class FeatureAssociation
     // QR factorization; the system can be over-defined and/or the matrix src1 can be singular
     cv::solve(matAtA, matAtB, matX, cv::DECOMP_QR); // Ax=B->get x(deltax)
 
+    // if it's the first iteration, check whether degenerated
     if (iterCount == 0)
-    { // check whether degenerated
+    {
       cv::Mat matE(1, 3, CV_32F, cv::Scalar::all(0));
       cv::Mat matV(3, 3, CV_32F, cv::Scalar::all(0));
       cv::Mat matV2(3, 3, CV_32F, cv::Scalar::all(0));
@@ -1407,8 +1430,9 @@ class FeatureAssociation
     }
     // for example, in a long corridor, cant estimate translation in direction of corridor,
     // thus, corresponding vector is degenerated and corresponding component of delta x should be zero
+    // if degenarate,  set degenerated component of delta x as zero
     if (isDegenerate)
-    { // set degenerated component of delta x as zero
+    {
       cv::Mat matX2(3, 1, CV_32F, cv::Scalar::all(0));
       matX.copyTo(matX2);
       matX = matP * matX2;
@@ -1474,7 +1498,8 @@ class FeatureAssociation
       pointOri = laserCloudOri->points[i];
       coeff    = coeffSel->points[i];
 
-      float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x + (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
+      float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x
+                  + (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
 
       float atx = -b5 * coeff.x + c5 * coeff.y + b1 * coeff.z;
 
@@ -1536,13 +1561,13 @@ class FeatureAssociation
     for (int i = 0; i < 6; i++)
     {
       if (isnan(transformCur[i]))
+      {
         transformCur[i] = 0;
+      }
     }
 
-    float deltaR = sqrt(
-        pow(rad2deg(matX.at<float>(0, 0)), 2));
-    float deltaT = sqrt(
-        pow(matX.at<float>(1, 0) * 100, 2) + pow(matX.at<float>(2, 0) * 100, 2));
+    float deltaR = sqrt(pow(rad2deg(matX.at<float>(0, 0)), 2));
+    float deltaT = sqrt(pow(matX.at<float>(1, 0) * 100, 2) + pow(matX.at<float>(2, 0) * 100, 2));
 
     if (deltaR < 0.1 && deltaT < 0.1)
     {
@@ -1608,11 +1633,16 @@ class FeatureAssociation
       pointOri = laserCloudOri->points[i];
       coeff    = coeffSel->points[i];
 
-      float arx = (-a1 * pointOri.x + a2 * pointOri.y + a3 * pointOri.z + a4) * coeff.x + (a5 * pointOri.x - a6 * pointOri.y + crx * pointOri.z + a7) * coeff.y + (a8 * pointOri.x - a9 * pointOri.y - a10 * pointOri.z + a11) * coeff.z;
+      float arx = (-a1 * pointOri.x + a2 * pointOri.y + a3 * pointOri.z + a4) * coeff.x
+                  + (a5 * pointOri.x - a6 * pointOri.y + crx * pointOri.z + a7) * coeff.y
+                  + (a8 * pointOri.x - a9 * pointOri.y - a10 * pointOri.z + a11) * coeff.z;
 
-      float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x + (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
+      float ary = (b1 * pointOri.x + b2 * pointOri.y - b3 * pointOri.z + b4) * coeff.x
+                  + (b5 * pointOri.x + b6 * pointOri.y - b7 * pointOri.z + b8) * coeff.z;
 
-      float arz = (c1 * pointOri.x + c2 * pointOri.y + c3) * coeff.x + (c4 * pointOri.x - c5 * pointOri.y + c6) * coeff.y + (c7 * pointOri.x + c8 * pointOri.y + c9) * coeff.z;
+      float arz = (c1 * pointOri.x + c2 * pointOri.y + c3) * coeff.x
+                  + (c4 * pointOri.x - c5 * pointOri.y + c6) * coeff.y
+                  + (c7 * pointOri.x + c8 * pointOri.y + c9) * coeff.z;
 
       float atx = -b5 * coeff.x + c5 * coeff.y + b1 * coeff.z;
 
@@ -1682,13 +1712,17 @@ class FeatureAssociation
     for (int i = 0; i < 6; i++)
     {
       if (isnan(transformCur[i]))
+      {
         transformCur[i] = 0;
+      }
     }
 
-    float deltaR = sqrt(
-        pow(rad2deg(matX.at<float>(0, 0)), 2) + pow(rad2deg(matX.at<float>(1, 0)), 2) + pow(rad2deg(matX.at<float>(2, 0)), 2));
-    float deltaT = sqrt(
-        pow(matX.at<float>(3, 0) * 100, 2) + pow(matX.at<float>(4, 0) * 100, 2) + pow(matX.at<float>(5, 0) * 100, 2));
+    float deltaR = sqrt(pow(rad2deg(matX.at<float>(0, 0)), 2)
+                        + pow(rad2deg(matX.at<float>(1, 0)), 2)
+                        + pow(rad2deg(matX.at<float>(2, 0)), 2));
+    float deltaT = sqrt(pow(matX.at<float>(3, 0) * 100, 2)
+                        + pow(matX.at<float>(4, 0) * 100, 2)
+                        + pow(matX.at<float>(5, 0) * 100, 2));
 
     if (deltaR < 0.1 && deltaT < 0.1)
     {
@@ -1762,12 +1796,13 @@ class FeatureAssociation
 
   void updateTransformation()
   {
-    // there are enough feature points
+    // whether there are enough feature points
     if (laserCloudCornerLastNum < 10 || laserCloudSurfLastNum < 100)
     {
       return;
     }
-    // iterative solution.
+
+    // iterative solution
     for (int iterCount1 = 0; iterCount1 < 25; iterCount1++)
     {
       laserCloudOri->clear();
@@ -1783,8 +1818,7 @@ class FeatureAssociation
       {
         break;
       }
-    }
-    //
+    } // endfor: get optimal transformation for surf features
 
     for (int iterCount2 = 0; iterCount2 < 25; iterCount2++)
     {
@@ -1801,8 +1835,7 @@ class FeatureAssociation
       {
         break;
       }
-    }
-    //
+    } // endfor: get optimal transformation for corner features
   }
 
   void integrateTransformation()
@@ -1824,8 +1857,9 @@ class FeatureAssociation
     ty = transformSum[4] - y2;
     tz = transformSum[5] - (-sin(ry) * x2 + cos(ry) * z2);
 
-    PluginIMURotation(rx, ry, rz, imuPitchStart, imuYawStart, imuRollStart,
-                      imuPitchLast, imuYawLast, imuRollLast, rx, ry, rz);
+    PluginIMURotation(rx, ry, rz,                                                                      // input
+                      imuPitchStart, imuYawStart, imuRollStart, imuPitchLast, imuYawLast, imuRollLast, // input
+                      rx, ry, rz);                                                                     // output
 
     transformSum[0] = rx;
     transformSum[1] = ry;

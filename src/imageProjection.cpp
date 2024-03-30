@@ -224,8 +224,8 @@ class ImageProjection
       {
         rowIdn = laserCloudInRing->points[i].ring;
       }
-      else
-      { // 点云没有ring字段的话需要依据垂直角度计算
+      else // 点云没有ring字段的话需要依据垂直角度计算
+      {
         verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y)) * 180 / M_PI;
         rowIdn        = (verticalAngle + ang_bottom) / ang_res_y;
       }
@@ -265,7 +265,8 @@ class ImageProjection
       fullCloud->points[index]               = thisPoint;
       fullInfoCloud->points[index]           = thisPoint;
       fullInfoCloud->points[index].intensity = range; // the corresponding range of a point is saved as "intensity"
-    }
+
+    } // endfor: have projected all points
   }
 
   void groundRemoval()
@@ -278,8 +279,7 @@ class ImageProjection
     //  1, ground
     for (size_t j = 0; j < Horizon_SCAN; ++j)
     {
-      // 每列角度最靠下的点被认为属于地面。角度从下到上遍历每一列的点。
-      // 同一列的相邻两点构成的直线如果和水平面的夹角较大，则认为地面在此处结束。
+      // 每列角度最靠下的点属于地面。角度从下到上遍历每一列的点,同一列的相邻两点构成的直线如果和水平面的夹角较大，则认为地面在此处结束。
       for (size_t i = 0; i < groundScanInd; ++i)
       {
         lowerInd = j + (i)*Horizon_SCAN;
@@ -308,7 +308,7 @@ class ImageProjection
     } // endfor: tanverse every column
 
     // extract ground cloud (groundMat == 1)
-    // mark entry that doesn't need to label (ground and invalid point) for segmentation
+    // mark points that doesn't need to label (ground and invalid point) for segmentation
     // note that ground remove is from 0~N_SCAN-1, need rangeMat for mark label matrix for the 16th scan
     for (size_t i = 0; i < N_SCAN; ++i)
     {
@@ -320,6 +320,7 @@ class ImageProjection
         }
       }
     }
+
     if (pubGroundCloud.getNumSubscribers() != 0)
     {
       for (size_t i = 0; i <= groundScanInd; ++i)
@@ -357,7 +358,7 @@ class ImageProjection
 
       for (size_t j = 0; j < Horizon_SCAN; ++j)
       {
-        if (labelMat.at<int>(i, j) > 0 || groundMat.at<int8_t>(i, j) == 1)
+        if (labelMat.at<int>(i, j) > 0 || groundMat.at<int8_t>(i, j) == 1) // valid point
         {
           // outliers that will not be used for optimization (always continue)
           if (labelMat.at<int>(i, j) == 999999)
@@ -372,11 +373,14 @@ class ImageProjection
               continue;
             }
           }
+
           // majority of ground points are skipped
           if (groundMat.at<int8_t>(i, j) == 1)
           {
             if (j % 5 != 0 && j > 5 && j < Horizon_SCAN - 5)
+            {
               continue;
+            }
           }
           // mark ground points so they will not be considered as edge features later
           segMsg.segmentedCloudGroundFlag[sizeOfSegCloud] = (groundMat.at<int8_t>(i, j) == 1);
@@ -388,11 +392,12 @@ class ImageProjection
           segmentedCloud->push_back(fullCloud->points[j + i * Horizon_SCAN]);
           // size of seg cloud
           ++sizeOfSegCloud;
-        }
-      }
+        } //
+
+      } // endfor: traverse Horizon_SCAN
 
       segMsg.endRingIndex[i] = sizeOfSegCloud - 1 - 5;
-    }
+    } // endfor: traverse N_SCAN
 
     // extract segmented cloud for visualization
     if (pubSegmentedCloudPure.getNumSubscribers() != 0)
@@ -413,8 +418,7 @@ class ImageProjection
 
   // 找到该点所在的物体的所有点，并为点分配标签
   /*点云聚类的目的主要是将相邻较近的点认为为同一物体表面，主要用于后续的特征提取；
-    遍历每个未被分类标记的点进行检测.以当前点开始将其上下，左右四个点分别列入待判断的buffer中，判断一点与其相邻点满足一条件。
-    直到所有点都被分类.
+    遍历每个未被分类标记的点进行检测.以当前点开始将其上下左右四个点列入待判断的buffer中，判断一点与其相邻点满足一条件，直到所有点都被分类
   */
   void labelComponents(int row, int col)
   {
@@ -427,7 +431,7 @@ class ImageProjection
     int fromIndX, fromIndY, thisIndX, thisIndY;
     bool lineCountFlag[N_SCAN] = {false}; // 表示对应行是否有点属于这个物体，false表示没有
 
-    queueIndX[0]      = row; // 队列中的点表示，改点和输入的点属于同一物体，但还没有检查过它的相邻点。
+    queueIndX[0]      = row; // 队列中的点表示，该点和输入的点属于同一物体，但还没有检查过它的相邻点。
     queueIndY[0]      = col;
     int queueSize     = 1;
     int queueStartInd = 0;
@@ -439,12 +443,12 @@ class ImageProjection
 
     while (queueSize > 0)
     {
-      // Pop point
+      // pop point
       fromIndX = queueIndX[queueStartInd];
       fromIndY = queueIndY[queueStartInd];
       --queueSize;
       ++queueStartInd;
-      // Mark popped point
+      // Mark popped points
       labelMat.at<int>(fromIndX, fromIndY) = labelCount;
       // Loop through all the neighboring grids of popped grid: 查询上下左右四个方向是否有相邻点
       for (auto iter = neighborIterator.begin(); iter != neighborIterator.end(); ++iter)
@@ -476,19 +480,20 @@ class ImageProjection
         d2 = std::min(rangeMat.at<float>(fromIndX, fromIndY), rangeMat.at<float>(thisIndX, thisIndY));
 
 
-        if ((*iter).first == 0)
-        { // 左右相邻
+        if ((*iter).first == 0) // 左右相邻
+        {
           alpha = segmentAlphaX;
         }
-        else
-        { // 上下相邻
+        else // 上下相邻
+        {
           alpha = segmentAlphaY;
         }
 
         angle = atan2(d2 * sin(alpha), (d1 - d2 * cos(alpha))); // 可以画图理解一下该角度的计算
 
+        // 越大表明越平坦，表明为同一分类，添加进队列
         if (angle > segmentTheta)
-        { // 越大表明越平坦，表明为同一分类，添加进队列
+        {
           queueIndX[queueEndInd] = thisIndX;
           queueIndY[queueEndInd] = thisIndY;
           ++queueSize;
@@ -512,8 +517,8 @@ class ImageProjection
       feasibleSegment = true;
     }
     else if (allPushedIndSize >= segmentValidPointNum)
-    { // 如果点数少但跨越的行数多，也可以认为这个物体的聚类有效
-
+    {
+      // 如果点数少但跨越的行数多，也可以认为这个物体的聚类有效
       int lineCount = 0; // 该物体跨越的行数
       for (size_t i = 0; i < N_SCAN; ++i)
       {
@@ -532,8 +537,8 @@ class ImageProjection
     {
       ++labelCount;
     }
-    else
-    { // segment is invalid, mark these points
+    else // segment is invalid, mark these points
+    {
       for (size_t i = 0; i < allPushedIndSize; ++i)
       {
         labelMat.at<int>(allPushedIndX[i], allPushedIndY[i]) = 999999;

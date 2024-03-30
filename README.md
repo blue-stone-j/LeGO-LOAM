@@ -10,3 +10,12 @@
 
 * 代码分析: https://blog.csdn.net/jiajiading/article/details/102776697
 
+# file function
+### imageProjection
+receive cloud and project cloud to pseudo-image.
+
+### featureAssociation
+extract features and registrate(associate) to calculate frame-frame transformation
+
+### mapOptmization
+optimization using local map
