@@ -47,7 +47,7 @@ class FeatureAssociation
   bool newSegmentedCloudInfo;
   bool newOutlierCloud;
 
-  cloud_msgs::cloud_info segInfo;
+  lego_loam::cloud_info segInfo;
   std_msgs::Header cloudHeader;
 
   int systemInitCount;
@@ -163,7 +163,7 @@ class FeatureAssociation
     nh("~")
   {
     subLaserCloud     = nh.subscribe<sensor_msgs::PointCloud2>("/segmented_cloud", 1, &FeatureAssociation::laserCloudHandler, this);
-    subLaserCloudInfo = nh.subscribe<cloud_msgs::cloud_info>("/segmented_cloud_info", 1, &FeatureAssociation::laserCloudInfoHandler, this);
+    subLaserCloudInfo = nh.subscribe<lego_loam::cloud_info>("/segmented_cloud_info", 1, &FeatureAssociation::laserCloudInfoHandler, this);
     subOutlierCloud   = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud", 1, &FeatureAssociation::outlierCloudHandler, this);
     subImu            = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &FeatureAssociation::imuHandler, this);
 
@@ -504,7 +504,7 @@ class FeatureAssociation
     newOutlierCloud = true;
   }
 
-  void laserCloudInfoHandler(const cloud_msgs::cloud_infoConstPtr &msgIn)
+  void laserCloudInfoHandler(const lego_loam::cloud_infoConstPtr &msgIn)
   {
     timeNewSegmentedCloudInfo = msgIn->header.stamp.toSec();
     segInfo                   = *msgIn;

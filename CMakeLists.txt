@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(lego_loam)
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11 -O3")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14 -O3")
 
 find_package(catkin REQUIRED COMPONENTS
   tf
@@ -17,12 +17,24 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   geometry_msgs
   nav_msgs
-  cloud_msgs
+  # cloud_msgs
 )
 
 find_package(GTSAM REQUIRED QUIET)
 find_package(PCL REQUIRED QUIET)
 find_package(OpenCV REQUIRED QUIET)
+
+add_message_files(
+  DIRECTORY msg
+  FILES
+  cloud_info.msg
+)
+generate_messages(DEPENDENCIES
+  std_msgs
+  geometry_msgs
+  nav_msgs
+  sensor_msgs
+)
 
 catkin_package(
   INCLUDE_DIRS include

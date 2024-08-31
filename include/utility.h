@@ -8,9 +8,10 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <nav_msgs/Odometry.h>
 
-#include "cloud_msgs/cloud_info.h"
+#include "lego_loam/cloud_info.h"
 
-#include <opencv/cv.h>
+// #include <opencv/cv.h>
+#include <opencv2/opencv.hpp>
 
 #include <pcl/point_cloud.h>
 #include <pcl/point_types.h>
@@ -164,12 +165,14 @@ struct PointXYZIR
 {
   PCL_ADD_POINT4D
   PCL_ADD_INTENSITY;
-  uint16_t ring;
+  std::uint16_t ring;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 } EIGEN_ALIGN16;
-
+// clang-format off
 POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIR,
-                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(uint16_t, ring, ring))
+                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)
+                                  (std::uint16_t, ring, ring))
+// clang-format on
 
 /*
  * A point cloud type that has 6D pose info ([x,y,z,roll,pitch,yaw] intensity is time stamp)
@@ -184,9 +187,11 @@ struct PointXYZIRPYT
   double time;
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 } EIGEN_ALIGN16;
-
+// clang-format off
 POINT_CLOUD_REGISTER_POINT_STRUCT(PointXYZIRPYT,
-                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)(float, roll, roll)(float, pitch, pitch)(float, yaw, yaw)(double, time, time))
+                                  (float, x, x)(float, y, y)(float, z, z)(float, intensity, intensity)
+                                  (float, roll, roll)(float, pitch, pitch)(float, yaw, yaw)(double, time, time))
+// clang-format on
 
 typedef PointXYZIRPYT PointTypePose;
 
